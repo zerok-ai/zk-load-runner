@@ -4,6 +4,7 @@ const app = express()
 app.use(express.json());
 const APP_PORT = 3000;
 const DEFAULT_INTERVAL_TIME_MS = 30000;
+const WAIT_TIME_IN_MIN = 10;
 // const K6_HOST = "svc-k6-k6.k6.svc.cluster.local";
 const K6_HOST = "k6.loadclient03.getanton.com";
 function testRunner(urlToRun) {
@@ -63,21 +64,8 @@ function k6Runner(scenarioToRun, urlToRun) {
                         console.log("Got error: " + error.message);
                     }else{
                         var currentTimePlus10Min = new Date();
-                        currentTimePlus10Min.setMinutes(currentTimePlus10Min.getMinutes() + 2);
+                        currentTimePlus10Min.setMinutes(currentTimePlus10Min.getMinutes() + WAIT_TIME_IN_MIN);
                         idToStartTime[scenarioToRun] = currentTimePlus10Min;
-                        // var startingOptions = {
-                        //     host: parsedUrl.hostname,
-                        //     path: parsedUrl.pathname + parsedUrl.search,
-                        //     port: 80,
-                        // };
-                        // console.log("Starting k6");
-                        // makeHttpGetCall(startingOptions, function(completeResponse, error){
-                        //     if(error != null){
-                        //         console.log("Got error: " + error.message);
-                        //     }else{
-                        //         console.log("k6 started");
-                        //     }
-                        // });
                     }
                 });
             }else if(completeResponse.indexOf('Invalid service name') != -1 || completeResponse.indexOf('No status available Error') != -1){
@@ -87,9 +75,7 @@ function k6Runner(scenarioToRun, urlToRun) {
                     console.log("K6 is not running for " + scenarioToRun + " and current time " + currentTime + " is less than idToStartTime " + idToStartTime[scenarioToRun]);
                     return;
                 }
-
                 console.log("K6 is not running for " + scenarioToRun);
-                console.log("Starting K6");
                 
                 var startingOptions = {
                     host: parsedUrl.hostname,
