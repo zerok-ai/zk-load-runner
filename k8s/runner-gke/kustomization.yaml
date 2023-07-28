@@ -1,0 +1,7 @@
+bases:
+  - ../runner
+resources:
+  - ./deployment.yaml
+namespace: k6
+commonLabels:
+  app: runner

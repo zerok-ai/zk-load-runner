@@ -1,0 +1,8 @@
+resources:
+  - namespace.yaml
+  - service.yaml
+  - service-monitor.yaml
+  - ingress-nginx.yaml
+namespace: k6
+commonLabels:
+  app: runner

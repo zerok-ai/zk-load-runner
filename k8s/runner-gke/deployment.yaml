@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner
+  labels:
+    app: runner
+    dep: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: runner
+      dep: default
+  template:
+    metadata:
+      labels:
+        app: runner
+        dep: default
+    spec:
+      # nodeSelector: {
+      #   role: k6
+      # }
+      tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "k6"
+        effect: "NoSchedule"
+      containers:
+        - name: runner
+          image: us-west1-docker.pkg.dev/zerok-dev/zk-commons/runner:latest
+          imagePullPolicy: Always
+          ports:
+          - name: m-http
+            containerPort: 3000
+          resources: 
+            requests: 
+              cpu: 750m
+              memory: 2500Mi
+            limits:
+              cpu: 850m
+              memory: 3000Mi 

@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: runner
+  labels:
+    app: runner
+spec:
+  selector:
+    matchLabels:
+      group: zerok-demoapp
+  endpoints:
+  - port: m-http
+    path: /metrics
+  namespaceSelector:
+    any: true
