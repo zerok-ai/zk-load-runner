@@ -3,6 +3,6 @@ resources:
   - service.yaml
   - service-monitor.yaml
   - ingress-nginx.yaml
-namespace: k6
+namespace: zk-load-runner
 commonLabels:
   app: runner

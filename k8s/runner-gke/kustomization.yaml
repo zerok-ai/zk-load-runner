@@ -2,6 +2,6 @@ bases:
   - ../runner
 resources:
   - ./deployment.yaml
-namespace: k6
+namespace: zk-load-runner
 commonLabels:
   app: runner
