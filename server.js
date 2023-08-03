@@ -5,19 +5,37 @@ app.use(express.json());
 const APP_PORT = 3000;
 const DEFAULT_INTERVAL_TIME_MS = 30000;
 const WAIT_TIME_IN_MIN = 10;
-// const K6_HOST = "svc-k6-k6.k6.svc.cluster.local";
 const K6_HOST = "k6.loadclient03.getanton.com";
-function testRunner(urlToRun) {
-    console.log("This function is executed at regular intervals " + urlToRun);
+
+function testRunner(id) {
+    console.log("This function is executed at regular intervals " + id);
 }
 
 function urlRunner(urlToRun) {
-    console.log("This function is executed at regular intervals " + urlToRun);
+    const parsedUrl = new URL(urlToRun);
+    var startingOptions = {
+        host: parsedUrl.hostname,
+        path: parsedUrl.pathname + parsedUrl.search,
+        port: 80,
+    };
+    
+    console.log("Firing Url");
+
+    makeHttpGetCall(startingOptions, function(completeResponse, error){
+        if(error != null){
+            console.log("Got error: " + error.message);
+        }else{
+            console.log("Response " + completeResponse);
+        }
+    });
 }
 
 var idToInterval = {};
 var idToStartTime = {};
-
+var idToType = {};
+const TYPE_TEST = "test";
+const TYPE_K6 = "k6";
+const TYPE_URL = "url";
 function makeHttpGetCall(options, callback){
     var http = require('http');
     var completeResponse = "";
@@ -95,88 +113,50 @@ function k6Runner(scenarioToRun, urlToRun) {
             }
         }
     });
-
-    // http.get(options, function(resp){
-    //     var completeResponse = "";
-    //     resp.on('end', function(){
-    //         if( completeResponse.indexOf('vus............................:') != -1){
-    //             console.log("K6 run is completed for scenario " + scenarioToRun);
-    //             //K6 run completed
-    //             var options = {
-    //                 host: K6_HOST,
-    //                 path: '/reset/',
-    //                 port: 80,
-    //             };
-    //             http.get(options, function(resp){
-    //                 resp.on('error', function(){
-    //                     console.log("Got error: " + e.message);
-    //                 });
-    //                 resp.on('end', function(){
-    //                     console.log("Resetting k6");
-    //                     var options = {
-    //                         host: parsedUrl.hostname,
-    //                         path: parsedUrl.pathname + parsedUrl.search,
-    //                         port: 80,
-    //                     };
-    //                     console.log("Starting k6");
-    //                     http.get(options, function(resp){
-    //                         console.log("k6 started");
-    //                     });
-    //                 });
-    //             }).on("error", function(e){
-    //                 console.log("Got error: " + e.message);
-    //             });
-    //         }else if(completeResponse.indexOf('Invalid service name') != -1 || completeResponse.indexOf('No status available Error') != -1){
-    //             console.log("K6 is not running for " + scenarioToRun);
-    //             console.log("Starting K6");
-                
-    //             var options = {
-    //                 host: parsedUrl.hostname,
-    //                 path: parsedUrl.pathname + parsedUrl.search,
-    //                 port: 80,
-    //             };
-    //             console.log("Starting k6");
-    //             http.get(options, function(resp){
-    //                 console.log("k6 started");
-    //             });
-    //         }else{
-    //             console.log("k6 already running");
-    //         }
-    //     });
-    //     resp.on('data', function(responseDataBytes){
-    //         responseData = responseDataBytes.toString('utf-8')
-    //         completeResponse += responseData;
-    //     }).on("error", function(e){
-    //         console.log("Got error: " + e.message);
-    //     });
-    // }).on("error", function(e){
-    //     console.log("Got error: " + e.message);
-    // });
-
 }
 
-//app, zk, zk-spill, zk-soak
 app.post('/start/:id', (req, res) => {
     var queryParams = req.query;
     var reqBody = req.body;
     var idToRun = req.params.id;
     var urlToRun = reqBody.url;
+    var type = reqBody.type;
     var scenarioName = reqBody.scenarioName;
     var intervalTime = queryParams.interval ? queryParams.interval : DEFAULT_INTERVAL_TIME_MS;
     //check if idToInterval contains the id and a non null value
     if(idToInterval[idToRun] != null){
         res.statusCode = 500;
         res.send('Runner with id ' + idToRun + ' is already running');
-    }else if(urlToRun == null || urlToRun == ''){
-        res.statusCode = 500;
-        res.send('Url to run is not valid');
-    }else{
-        // start urlrunner with the urlToRun
-        var intervalId = setInterval(() => k6Runner(scenarioName, urlToRun), intervalTime);
-        idToInterval[idToRun] = intervalId;
-        res.send('Started runner ' + idToRun + ' successfully');
+        return;
     }
 
+    if(type == TYPE_TEST){
+        var intervalId = setInterval(() => testRunner(idToRun), intervalTime);
+        idToInterval[idToRun] = intervalId;
+        idToType[idToRun] = type;
+    }else if(type == TYPE_URL){
+        if(urlToRun == null || urlToRun == ''){
+            res.statusCode = 500;
+            res.send('Url to run is not valid');
+            return;
+        }
+        var intervalId = setInterval(() => urlRunner(urlToRun), intervalTime);
+        idToInterval[idToRun] = intervalId;
+        idToType[idToRun] = type;
+    }else if(type == TYPE_K6){
+        if(urlToRun == null || urlToRun == ''){
+            res.statusCode = 500;
+            res.send('Url to run is not valid');
+        }else{
+            // start urlrunner with the urlToRun
+            var intervalId = setInterval(() => k6Runner(scenarioName, urlToRun), intervalTime);
+            idToInterval[idToRun] = intervalId;
+            res.send('Started runner ' + idToRun + ' successfully');
+        }
+    }else{
+        res.statusCode = 500;
+        res.send('Type ' + type + ' is not supported');
+    }
 });
 
 //api to clear the interval if running
@@ -186,6 +166,8 @@ app.get('/stop/:id', (req, res) => {
     if(intervalId != null){
         clearInterval(intervalId);
         delete idToInterval[idToStop];
+        delete idToStartTime[idToStop];
+        delete idToType[idToStop];
         res.send('Runner stopped successfully');
     }else{
         res.statusCode = 500;
@@ -208,7 +190,15 @@ app.get('/status/:id', (req, res) => {
 app.get('/list', (req, res) => {
     var runners = [];
     for(var key in idToInterval){
-        runners.push(key);
+        var obj = {
+            id: key,
+            type: idToType[key],
+            lastRunAt: idToStartTime[key],
+        };
+        if(type == TYPE_K6){
+            
+        }
+        runners.push(obj);
     }
     res.send(runners);
 });
