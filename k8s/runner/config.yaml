@@ -1,0 +1,9 @@
+apiVersion: v1
+data:
+  zk-runner-configmap.yaml: |
+    k6_wait_time_min: 10
+    k6_host: k6.loadclient03.getanton.com
+    runner_interval_ms: 30000
+kind: ConfigMap
+metadata:
+  name: zk-runner-configmap

@@ -3,12 +3,18 @@ const express = require('express')
 const app = express()
 app.use(express.json());
 const APP_PORT = 3000;
-const DEFAULT_INTERVAL_TIME_MS = 30000;
-const WAIT_TIME_IN_MIN = 10;
-const K6_HOST = "k6.loadclient03.getanton.com";
+var DEFAULT_INTERVAL_TIME_MS = 30000;
+var K6_WAIT_TIME_IN_MIN = 10;
+var K6_HOST = "k6.loadclient03.getanton.com";
 
 function testRunner(id) {
     console.log("This function is executed at regular intervals " + id);
+}
+
+function printConfigs() {
+    console.log("K6_HOST " + K6_HOST);
+    console.log("K6_WAIT_TIME_IN_MIN " + K6_WAIT_TIME_IN_MIN);
+    console.log("DEFAULT_INTERVAL_TIME_MS " + DEFAULT_INTERVAL_TIME_MS);
 }
 
 function urlRunner(urlToRun) {
@@ -82,7 +88,7 @@ function k6Runner(scenarioToRun, urlToRun) {
                         console.log("Got error: " + error.message);
                     }else{
                         var currentTimePlus10Min = new Date();
-                        currentTimePlus10Min.setMinutes(currentTimePlus10Min.getMinutes() + WAIT_TIME_IN_MIN);
+                        currentTimePlus10Min.setMinutes(currentTimePlus10Min.getMinutes() + K6_WAIT_TIME_IN_MIN);
                         idToStartTime[scenarioToRun] = currentTimePlus10Min;
                     }
                 });
@@ -134,6 +140,7 @@ app.post('/start/:id', (req, res) => {
         var intervalId = setInterval(() => testRunner(idToRun), intervalTime);
         idToInterval[idToRun] = intervalId;
         idToType[idToRun] = type;
+        res.send('Started runner ' + idToRun + ' successfully');
     }else if(type == TYPE_URL){
         if(urlToRun == null || urlToRun == ''){
             res.statusCode = 500;
@@ -143,6 +150,7 @@ app.post('/start/:id', (req, res) => {
         var intervalId = setInterval(() => urlRunner(urlToRun), intervalTime);
         idToInterval[idToRun] = intervalId;
         idToType[idToRun] = type;
+        res.send('Started runner ' + idToRun + ' successfully');
     }else if(type == TYPE_K6){
         if(urlToRun == null || urlToRun == ''){
             res.statusCode = 500;
@@ -151,6 +159,7 @@ app.post('/start/:id', (req, res) => {
             // start urlrunner with the urlToRun
             var intervalId = setInterval(() => k6Runner(scenarioName, urlToRun), intervalTime);
             idToInterval[idToRun] = intervalId;
+            idToType[idToRun] = type;
             res.send('Started runner ' + idToRun + ' successfully');
         }
     }else{
@@ -188,6 +197,8 @@ app.get('/status/:id', (req, res) => {
 
 //api to list all the runners
 app.get('/list', (req, res) => {
+    var queryParams = req.query;
+    var scenarioName = queryParams.scenario;
     var runners = [];
     for(var key in idToInterval){
         var obj = {
@@ -195,17 +206,61 @@ app.get('/list', (req, res) => {
             type: idToType[key],
             lastRunAt: idToStartTime[key],
         };
-        if(type == TYPE_K6){
+        if(obj.type == TYPE_K6){
+            var startingOptions = {
+                host: K6_HOST,
+                path: '/list/' + scenarioName,
+                port: 80,
+            };
             
+            makeHttpGetCall(startingOptions, function(completeResponse, error){
+                if(error != null){
+                    console.log("Got error: " + error.message);
+                }else{
+                    console.log("Response " + completeResponse);
+                    completeResponse = JSON.parse(completeResponse);
+                    obj.logs = [];
+                    //completeResponse is an array of strings, check if its set and non empty
+                    if(completeResponse != null && completeResponse.length > 0){
+                        for(var i = 0; i < completeResponse.length; i++){
+                            var lastrun = completeResponse[i];
+                            var url = "http://" + K6_HOST + "/fetch/" + scenarioName + "/" + lastrun;
+                            obj.logs.push(url);
+                        }
+                    }
+                    res.send(runners);
+                }
+            });
         }
         runners.push(obj);
     }
-    res.send(runners);
+    if(runners.length == 0){
+        res.send(runners);
+    }
 });
 
 //http://svc-k6-k6.k6.svc.cluster.local/start/sofa-shop-inventory?rndlimit=${rndlimit}&rndon=${rndon}&rndmemon=${rndmemon}&vus=${init_vus}&mvus=${max_vus}&timeunit=${time_unit}&stages=${sofa_shop_inventory_traffic}&rate=5&k6ScriptFilePath=/usr/src/app/k6script-inventory.js"
 
+//api to update the configs (K6_HOST, K6_WAIT_TIME_IN_MIN, DEFAULT_INTERVAL_TIME_MS ) and print the updated configs using the printConfigs function
+app.post('/configs', (req, res) => {
+    var reqBody = req.body;
+    var k6Host = reqBody.k6Host;
+    var k6WaitTimeInMin = reqBody.k6WaitTimeInMin;
+    var intervalTimeMs = reqBody.intervalTimeMs;
+    if(k6Host != null && k6Host != ''){
+        K6_HOST = k6Host;
+    }
+    if(k6WaitTimeInMin != null && k6WaitTimeInMin != ''){
+        K6_WAIT_TIME_IN_MIN = k6WaitTimeInMin;
+    }
+    if(intervalTimeMs != null && intervalTimeMs != ''){
+        DEFAULT_INTERVAL_TIME_MS = intervalTimeMs;
+    }
+    res.send('Updated configs successfully');
+    printConfigs();
+});
 
 app.listen(APP_PORT, () => {
     console.log(`Example app listening on port ${APP_PORT}`)
+    printConfigs();
 })
